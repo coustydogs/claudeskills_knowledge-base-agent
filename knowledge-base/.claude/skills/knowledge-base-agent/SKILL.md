@@ -17,9 +17,28 @@ StorageDB（情報収集・ナレッジ管理の統合DB）から未処理アイ
 echo "NOTION_TOKEN: ${NOTION_TOKEN:0:10}..."
 ```
 
-トークンが未設定の場合、ユーザーに以下を案内:
+### トークンが未設定の場合
+
+以下のエラーメッセージをユーザーに表示し、処理を停止すること:
+
 ```
-export NOTION_TOKEN=ntn_xxxxx
+❌ エラー: NOTION_TOKEN が設定されていません。
+
+Notion インテグレーショントークンを取得・設定してください:
+1. https://www.notion.so/my-integrations にアクセス
+2. 「新しいインテグレーション」を作成（または既存のものを選択）
+3. 「内部インテグレーショントークン」をコピー（ntn_... で始まる文字列）
+4. 以下のいずれかの方法でトークンを設定:
+
+【ローカル環境】
+  export NOTION_TOKEN=ntn_xxxxx
+  （~/.zshrc や ~/.bashrc に追記すると永続化できます）
+
+【iOS Claude Code / Web Claude Code】
+  プロジェクトの .env ファイルに記載するか、
+  セッション開始時に上記の export コマンドを実行してください。
+
+設定後、再度スキルを起動してください。
 ```
 
 ## リファレンスファイル
