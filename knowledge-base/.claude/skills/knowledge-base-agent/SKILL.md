@@ -10,7 +10,7 @@ StorageDB（情報収集・ナレッジ管理の統合DB）から未処理アイ
 ## 前提条件
 
 - 環境変数 `NOTION_TOKEN` が設定されていること
-- Claude Code のローカル環境で実行すること（Coworkでは動作しない）
+- ローカル・iOS Claude Code（リモートリポジトリ接続）いずれでも動作する
 
 起動時に必ず以下を確認:
 ```bash
@@ -21,7 +21,6 @@ echo "NOTION_TOKEN: ${NOTION_TOKEN:0:10}..."
 ```
 export NOTION_TOKEN=ntn_xxxxx
 ```
-または `claude_desktop_config.json` の env セクションに設定。
 
 ## リファレンスファイル
 
