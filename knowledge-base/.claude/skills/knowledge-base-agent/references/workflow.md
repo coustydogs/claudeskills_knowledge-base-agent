@@ -2,13 +2,29 @@
 
 ## 起動時チェック
 
-```
-1. 利用可能なNotionツールを検出し、動作モードを決定
-   - notion-fetch, notion-search, notion-update-page が使える → プラグインモード
-   - API-query-data-source, API-patch-page が使える + NOTION_TOKEN あり → MCP+curlモード
-2. リファレンスファイルの読み込み（db_schema.md, api_patterns.sh）
-3. StorageDB への接続テスト（1件クエリ）
-```
+### ステップ1: ツール検出（モード決定）
+
+**プラグインモードを最優先で確認する:**
+
+1. `notion-fetch`, `notion-search`, `notion-update-page` が利用可能か確認
+   - ツールが存在すれば → **プラグインモードで動作確定**（ステップ2〜3をスキップしてPhase 1へ進む）
+   - iOS/macOS両対応。NOTION_TOKEN・ネットワーク確認は不要
+
+2. プラグインツールが利用不可の場合のみ、MCP+curlモードを確認:
+   - `API-query-data-source` と `API-patch-page` が利用可能 **かつ** `NOTION_TOKEN` 環境変数が設定済み → **MCP+curlモードで動作**
+
+3. どちらも利用不可の場合:
+   - エラーを表示して停止: 「iOSではNotionマーケットプレイスプラグインをClaudeに接続してから再試行してください。macOSではMCP設定とNOTION_TOKENを確認してください。」
+
+> **重要**: プラグインモードが確認できた場合、NOTION_TOKEN / api.notion.com へのネットワーク疎通 / claude_desktop_config.json の確認は**行わない**。これらはMCP+curlモード専用のチェックであり、プラグインモードでは不要。
+
+### ステップ2: リファレンスファイルの読み込み
+
+`db_schema.md` と `api_patterns.sh` を読み込む。
+
+### ステップ3: StorageDB への接続テスト（1件クエリ）
+
+接続テストで `notion-fetch` や `notion-search` を呼び出した際、Notionホスト画像URLへのアクセスエラーが発生しても**接続テスト失敗とみなさない**（後述の画像ハンドリング参照）。
 
 ## Phase 1: 未処理アイテム取得
 
@@ -55,6 +71,21 @@ API-query-data-source:
     select:
       equals: "未処理"
 ```
+
+## Notionホスト画像の扱い（iOS/プラグインモード共通）
+
+StorageDBのページや `Files` プロパティには、Notionがホストする画像が含まれる場合がある。これらは以下の形式の署名付きS3 URLであり、短時間で有効期限が切れる:
+
+```
+https://prod-files-secure.s3.us-west-2.amazonaws.com/...?X-Amz-Security-Token=...
+```
+
+**対応方針**:
+- 画像URLへのアクセス失敗（`WebFetch`エラー、`host_not_allowed`等）が発生しても**処理全体を中断しない**
+- `notion-fetch` の返却値に画像ブロック（`image` type）が含まれる場合、テキストコンテンツのみ利用する
+- `Files` プロパティの内容（Notionホスト画像ファイル）は分析対象外としてスキップする
+- 画像アクセスエラーはログに記録せず、無視して処理を継続する
+- 起動時の接続テストでこのエラーが発生しても「接続失敗」とみなさない
 
 ## Phase 2: コンテンツ取得・分析
 

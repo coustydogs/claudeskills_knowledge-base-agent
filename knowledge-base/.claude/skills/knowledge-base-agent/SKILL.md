@@ -21,7 +21,17 @@ StorageDB（情報収集・ナレッジ管理の統合DB）から未処理アイ
 | **プラグインモード**（iOS/macOS共通） | `notion-fetch`, `notion-search`, `notion-update-page` が利用可能 | Notionマーケットプレイスプラグイン |
 | **MCP+curlモード**（macOSのみ） | `API-query-data-source`, `API-patch-page` が利用可能 + `NOTION_TOKEN` 環境変数あり | MCP標準ツール + curl |
 
-プラグインモードを優先する。MCP+curlモードはフォールバック。
+**プラグインモードを優先する。** プラグインツールが確認できた場合、NOTION_TOKEN・ネットワーク疎通・設定ファイルの確認は行わない。MCP+curlモードはフォールバック。
+
+### iOS での注意事項
+
+iOSのClaude Codeでは以下の制約がある:
+
+- `NOTION_TOKEN` 環境変数は利用不可
+- `api.notion.com` へのネットワーク直接アクセスはブロックされる（MCP+curlモード不可）
+- **→ Notionマーケットプレイスプラグインを接続することでプラグインモードが利用可能になる**
+
+また、Notionがホストする画像（`Files` プロパティや埋め込み画像）のURLは署名付きS3 URLのため、iOSのClaude Codeコンテナ環境からアクセスできない場合がある。これらの画像はスキップして処理を継続する。
 
 ## リファレンスファイル
 
