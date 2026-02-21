@@ -2,21 +2,14 @@
 
 ## 起動時チェック
 
-### ステップ1: ツール検出（モード決定）
+### ステップ1: NOTION_TOKEN 確認
 
-**プラグインモードを最優先で確認する:**
+```bash
+echo "NOTION_TOKEN: ${NOTION_TOKEN:0:10}..."
+```
 
-1. `notion-fetch`, `notion-search`, `notion-update-page` が利用可能か確認
-   - ツールが存在すれば → **プラグインモードで動作確定**（ステップ2〜3をスキップしてPhase 1へ進む）
-   - iOS/macOS両対応。NOTION_TOKEN・ネットワーク確認は不要
-
-2. プラグインツールが利用不可の場合のみ、MCP+curlモードを確認:
-   - `API-query-data-source` と `API-patch-page` が利用可能 **かつ** `NOTION_TOKEN` 環境変数が設定済み → **MCP+curlモードで動作**
-
-3. どちらも利用不可の場合:
-   - エラーを表示して停止: 「iOSではNotionマーケットプレイスプラグインをClaudeに接続してから再試行してください。macOSではMCP設定とNOTION_TOKENを確認してください。」
-
-> **重要**: プラグインモードが確認できた場合、NOTION_TOKEN / api.notion.com へのネットワーク疎通 / claude_desktop_config.json の確認は**行わない**。これらはMCP+curlモード専用のチェックであり、プラグインモードでは不要。
+未設定の場合は停止してユーザーに設定を促す:
+> `NOTION_TOKEN` が設定されていません。`~/.zshrc` または Claude Desktop の設定ファイルに `NOTION_TOKEN=secret_xxx...` を追加してください。
 
 ### ステップ2: リファレンスファイルの読み込み
 
@@ -24,7 +17,20 @@
 
 ### ステップ3: StorageDB への接続テスト（1件クエリ）
 
-接続テストで `notion-fetch` や `notion-search` を呼び出した際、Notionホスト画像URLへのアクセスエラーが発生しても**接続テスト失敗とみなさない**（後述の画像ハンドリング参照）。
+```bash
+RESPONSE=$(curl -s -w "\n%{http_code}" \
+  "https://api.notion.com/v1/databases/49998bb8988d44b083e816f939d9d018" \
+  -H "Authorization: Bearer $NOTION_TOKEN" \
+  -H "Notion-Version: 2022-06-28")
+
+HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+if [ "$HTTP_CODE" != "200" ]; then
+  echo "接続エラー: HTTP $HTTP_CODE"
+  echo "$RESPONSE" | sed '$d'
+fi
+```
+
+200 以外の場合はエラーを表示して停止。
 
 ## Phase 1: 未処理アイテム取得
 
@@ -33,59 +39,21 @@
 2. 取得したアイテムのリストを表示
 3. ユーザーに処理対象を確認（全件 or 選択）
 
-### プラグインモードの場合
-
-1. `notion-search` で StorageDB データソース内を検索:
-   - `query`: `"未処理"`
-   - `data_source_url`: `collection://48887d97-0f04-4c52-9f44-0b77fd8cf4f1`
-2. 検索結果の各ページを `notion-fetch` で取得し、Status プロパティが「未処理」であることを確認
-3. Status が「未処理」でないページは除外
-
-```
-notion-search:
-  query: "未処理"
-  data_source_url: "collection://48887d97-0f04-4c52-9f44-0b77fd8cf4f1"
-
-# 各結果に対して:
-notion-fetch:
-  id: "{page_id}"
-# → Status プロパティを確認
-```
-
-### MCP+curlモードの場合
-
 ```bash
 curl -s -X POST "https://api.notion.com/v1/databases/49998bb8988d44b083e816f939d9d018/query" \
   -H "Authorization: Bearer $NOTION_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Notion-Version: 2022-06-28" \
-  -d '{"filter":{"property":"Status","select":{"equals":"未処理"}},"page_size":10}'
+  -d '{
+  "filter": {
+    "property": "Status",
+    "select": {
+      "equals": "未処理"
+    }
+  },
+  "page_size": 10
+}'
 ```
-
-または MCP `API-query-data-source`:
-```
-API-query-data-source:
-  data_source_id: "48887d97-0f04-4c52-9f44-0b77fd8cf4f1"
-  filter:
-    property: "Status"
-    select:
-      equals: "未処理"
-```
-
-## Notionホスト画像の扱い（iOS/プラグインモード共通）
-
-StorageDBのページや `Files` プロパティには、Notionがホストする画像が含まれる場合がある。これらは以下の形式の署名付きS3 URLであり、短時間で有効期限が切れる:
-
-```
-https://prod-files-secure.s3.us-west-2.amazonaws.com/...?X-Amz-Security-Token=...
-```
-
-**対応方針**:
-- 画像URLへのアクセス失敗（`WebFetch`エラー、`host_not_allowed`等）が発生しても**処理全体を中断しない**
-- `notion-fetch` の返却値に画像ブロック（`image` type）が含まれる場合、テキストコンテンツのみ利用する
-- `Files` プロパティの内容（Notionホスト画像ファイル）は分析対象外としてスキップする
-- 画像アクセスエラーはログに記録せず、無視して処理を継続する
-- 起動時の接続テストでこのエラーが発生しても「接続失敗」とみなさない
 
 ## Phase 2: コンテンツ取得・分析
 
@@ -119,77 +87,34 @@ https://prod-files-secure.s3.us-west-2.amazonaws.com/...?X-Amz-Security-Token=..
 
 ## Phase 3: StorageDB 分析結果更新
 
-### プラグインモードの場合
+curl で PATCH リクエストを送信:
 
-`notion-update-page` の `update_properties` コマンドを使用:
+```bash
+PAGE_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+TODAY=$(date -u +%Y-%m-%d)
 
-```
-notion-update-page:
-  data:
-    page_id: "ページID"
-    command: "update_properties"
-    properties:
-      Category: "AI・機械学習"
-      SubCategory: ["Agent", "LLM"]
-      Tags: ["技術解説", "日本"]
-      Companies: ["OpenAI", "Anthropic"]
-      Relevance: "高"
-      Summary: "要約テキスト"
-      KeyPoints: "• ポイント1\n• ポイント2"
-      Status: "完了"
-      date:OriginalDate:start: "2026-02-15"
-      date:OriginalDate:is_datetime: 0
-      date:ProcessedAt:start: "2026-02-21"
-      date:ProcessedAt:is_datetime: 0
-```
-
-### MCP+curlモードの場合
-
-MCP `API-patch-page`:
-```
-API-patch-page:
-  page_id: "ページID"
-  properties:
-    Category:
-      select:
-        name: "AI・機械学習"
-    SubCategory:
-      multi_select:
-        - name: "Agent"
-        - name: "LLM"
-    Tags:
-      multi_select:
-        - name: "技術解説"
-        - name: "日本"
-    Companies:
-      multi_select:
-        - name: "OpenAI"
-        - name: "Anthropic"
-    Relevance:
-      select:
-        name: "高"
-    Summary:
-      rich_text:
-        - text:
-            content: "[概要] ... [主要内容] ... [意義・影響] ..."
-    KeyPoints:
-      rich_text:
-        - text:
-            content: "• ポイント1\n• ポイント2\n• ポイント3"
-    OriginalDate:
-      date:
-        start: "2026-02-15"
-    Status:
-      select:
-        name: "完了"
-    ProcessedAt:
-      date:
-        start: "2026-02-21"
+curl -s -w "\n%{http_code}" -X PATCH "https://api.notion.com/v1/pages/$PAGE_ID" \
+  -H "Authorization: Bearer $NOTION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Notion-Version: 2022-06-28" \
+  -d '{
+  "properties": {
+    "Category": {"select": {"name": "AI・機械学習"}},
+    "SubCategory": {"multi_select": [{"name": "Agent"}, {"name": "LLM"}]},
+    "Tags": {"multi_select": [{"name": "技術解説"}, {"name": "日本"}]},
+    "Companies": {"multi_select": [{"name": "OpenAI"}, {"name": "Anthropic"}]},
+    "Relevance": {"select": {"name": "高"}},
+    "Summary": {"rich_text": [{"text": {"content": "[概要] ... [主要内容] ... [意義・影響] ..."}}]},
+    "KeyPoints": {"rich_text": [{"text": {"content": "• ポイント1\n• ポイント2\n• ポイント3"}}]},
+    "OriginalDate": {"date": {"start": "2026-02-15"}},
+    "Status": {"select": {"name": "完了"}},
+    "ProcessedAt": {"date": {"start": "'"$TODAY"'"}}
+  }
+}'
 ```
 
 ### 注意事項
-- プラグインモード: multi_select は JSON配列で指定（例: `["Agent", "LLM"]`）
-- MCP+curlモード: multi_select は `[{"name": "値1"}, {"name": "値2"}]` 形式
+- multi_select は `[{"name": "値1"}, {"name": "値2"}]` 形式
 - rich_text は2000文字制限あり。超える場合は分割
 - ProcessedAt には処理実行日（当日）を設定
 - Companies で DB に存在しない企業名を指定すると、自動的に新しい選択肢が作成される
@@ -198,12 +123,11 @@ API-patch-page:
 
 | エラー | 対応 |
 |--------|------|
-| 401 Unauthorized | NOTION_TOKEN の値を確認（MCP+curlモード時） |
+| 401 Unauthorized | NOTION_TOKEN の値を確認 |
 | 404 Not Found | ページ/DB の ID を確認。インテグレーションの共有設定を確認 |
 | 400 Validation Error | プロパティ名やフォーマットを確認 |
 | rich_text 2000文字超 | テキストを分割して複数の rich_text オブジェクトに |
 | SourceURL アクセス不可 | StorageDB の RawContent を代替ソースとして使用 |
-| プラグインツール未検出 | MCP+curlモードにフォールバック。NOTION_TOKEN の設定を確認 |
 
 ## 処理完了後
 
