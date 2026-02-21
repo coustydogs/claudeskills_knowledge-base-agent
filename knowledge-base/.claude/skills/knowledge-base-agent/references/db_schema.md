@@ -11,6 +11,12 @@
 
 ## StorageDB スキーマ
 
+### ページボディ（本文ブロック）
+
+Notionページの本文（コンテンツブロック）に元のテキスト内容が格納される場合がある。
+`notion-fetch` でページを取得すると、プロパティに加えて本文ブロックも返される。
+**Phase 2 のコンテンツ取得では、RawContent プロパティより前にページボディを優先して確認すること。**
+
 ### 基本プロパティ（収集時に設定）
 
 | プロパティ | 型 | 説明 |
@@ -19,7 +25,7 @@
 | SourceURL | url | 元記事のURL |
 | SourceType | select | `テキスト`, `Web記事`, `YouTube`, `PDF` |
 | Status | select | `null`(未処理), `処理中`, `完了`, `エラー` |
-| RawContent | rich_text | 元のテキスト内容 |
+| RawContent | rich_text | 元のテキスト内容（ページボディが空の場合の代替） |
 | Files | files | 添付ファイル |
 
 ### 分析プロパティ（エージェントが処理時に設定）

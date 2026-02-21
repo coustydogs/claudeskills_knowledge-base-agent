@@ -1,13 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(export:*)",
       "Bash(curl:*)",
-      "Bash(wc:*)",
-      "WebFetch(domain:note.com)",
-      "WebFetch(domain:strainer.jp)",
-      "WebFetch(domain:builders.ramp.com)",
-      "mcp__notion__API-get-block-children"
+      "Bash(echo:*)",
+      "Bash(date:*)",
+      "Bash(python3:*)",
+      "WebFetch(*)"
     ]
   }
 }

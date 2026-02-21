@@ -99,10 +99,14 @@ https://prod-files-secure.s3.us-west-2.amazonaws.com/...?X-Amz-Security-Token=..
 ## Phase 2: コンテンツ取得・分析
 
 ### 手順
-1. SourceURL からコンテンツを取得
-   - Web記事: `WebFetch` ツールで取得
-   - YouTube: URLからメタデータ取得（トランスクリプトは取れない場合あり）
-   - テキスト: StorageDB の RawContent から取得
+1. コンテンツを取得（以下の優先順位で）:
+   1. `notion-fetch` で対象ページを取得し、**ページボディ（本文ブロック）**にコンテンツがあるか確認する
+   2. ページボディにテキストコンテンツがある場合はそれを使用（外部アクセス不要）
+   3. ページボディが空の場合、次に **RawContent** プロパティを確認する
+   4. RawContent にも値がない場合のみ、SourceURL から取得を試みる:
+      - Web記事: `WebFetch` ツールで取得
+      - YouTube: URLからメタデータ取得（トランスクリプトは取れない場合あり）
+   5. SourceURL の取得がセキュリティ制限等でブロックされた場合はエラーとせず処理を継続する。ページボディ・RawContent ともに空の場合のみユーザーに手動入力を求める。
 2. コンテンツを分析して以下を生成:
 
 ### 分析項目
@@ -211,7 +215,7 @@ API-patch-page:
 | 404 Not Found | ページ/DB の ID を確認。インテグレーションの共有設定を確認 |
 | 400 Validation Error | プロパティ名やフォーマットを確認 |
 | rich_text 2000文字超 | テキストを分割して複数の rich_text オブジェクトに |
-| SourceURL アクセス不可 | StorageDB の RawContent を代替ソースとして使用 |
+| SourceURL アクセス不可（セキュリティブロック含む） | **ページボディのコンテンツを使用し処理を継続**。エラーとして扱わない。ページボディ・RawContent ともに空の場合のみユーザーに確認 |
 | プラグインツール未検出（iOS） | **NOTION_TOKENは確認しない**。「Notionマーケットプレイスプラグインを接続してください」と表示して停止 |
 | プラグインツール未検出（macOS） | MCP+curlモードにフォールバック。NOTION_TOKEN・MCP設定を確認 |
 | NOTION_TOKENエラー（iOSで発生） | プラグインモードの起動チェックに戻る。NOTION_TOKENはiOSでは使用不可であり、プラグインツールが未検出だったことを意味する |
