@@ -4,19 +4,28 @@
 
 ### ステップ1: ツール検出（モード決定）
 
-**プラグインモードを最優先で確認する:**
+> **⚠️ 絶対ルール**: `notion-fetch` がツールリストに存在する場合、**NOTION_TOKENを確認してはならない**。確認した時点でiOSでは必ずエラーになる。
 
-1. `notion-fetch`, `notion-search`, `notion-update-page` が利用可能か確認
-   - ツールが存在すれば → **プラグインモードで動作確定**（ステップ2〜3をスキップしてPhase 1へ進む）
-   - iOS/macOS両対応。NOTION_TOKEN・ネットワーク確認は不要
+**以下の順序で判定する（分岐は排他的）:**
 
-2. プラグインツールが利用不可の場合のみ、MCP+curlモードを確認:
-   - `API-query-data-source` と `API-patch-page` が利用可能 **かつ** `NOTION_TOKEN` 環境変数が設定済み → **MCP+curlモードで動作**
+```
+notion-fetch / notion-search / notion-update-page が
+自分のツールリストに存在する?
+  ↓ YES → プラグインモード確定。NOTION_TOKENは一切確認しない。Phase 1へ進む。
+  ↓ NO  → MCP+curlモードを確認する:
+           API-query-data-source と API-patch-page が存在する かつ
+           NOTION_TOKEN 環境変数が設定済み?
+             ↓ YES → MCP+curlモードで動作
+             ↓ NO  → エラーで停止（下記メッセージ）
+```
 
-3. どちらも利用不可の場合:
-   - エラーを表示して停止: 「iOSではNotionマーケットプレイスプラグインをClaudeに接続してから再試行してください。macOSではMCP設定とNOTION_TOKENを確認してください。」
+**停止メッセージ（どちらも利用不可の場合）:**
+```
+iOSの場合: 「Notionマーケットプレイスプラグインをこのチャットに接続してから再試行してください。」
+macOSの場合: 「MCP設定とNOTION_TOKEN環境変数を確認してください。」
+```
 
-> **重要**: プラグインモードが確認できた場合、NOTION_TOKEN / api.notion.com へのネットワーク疎通 / claude_desktop_config.json の確認は**行わない**。これらはMCP+curlモード専用のチェックであり、プラグインモードでは不要。
+> **重要**: プラグインモードが確定した後は、NOTION_TOKEN / api.notion.com へのネットワーク疎通 / claude_desktop_config.json の確認を**一切行わない**。これらはMCP+curlモード専用のチェックであり、プラグインモードでは不要かつ有害。
 
 ### ステップ2: リファレンスファイルの読み込み
 
@@ -198,12 +207,14 @@ API-patch-page:
 
 | エラー | 対応 |
 |--------|------|
-| 401 Unauthorized | NOTION_TOKEN の値を確認（MCP+curlモード時） |
+| 401 Unauthorized | **MCP+curlモード時のみ**: NOTION_TOKEN の値を確認。プラグインモードでこのエラーが出た場合はプラグイン設定の問題 |
 | 404 Not Found | ページ/DB の ID を確認。インテグレーションの共有設定を確認 |
 | 400 Validation Error | プロパティ名やフォーマットを確認 |
 | rich_text 2000文字超 | テキストを分割して複数の rich_text オブジェクトに |
 | SourceURL アクセス不可 | StorageDB の RawContent を代替ソースとして使用 |
-| プラグインツール未検出 | MCP+curlモードにフォールバック。NOTION_TOKEN の設定を確認 |
+| プラグインツール未検出（iOS） | **NOTION_TOKENは確認しない**。「Notionマーケットプレイスプラグインを接続してください」と表示して停止 |
+| プラグインツール未検出（macOS） | MCP+curlモードにフォールバック。NOTION_TOKEN・MCP設定を確認 |
+| NOTION_TOKENエラー（iOSで発生） | プラグインモードの起動チェックに戻る。NOTION_TOKENはiOSでは使用不可であり、プラグインツールが未検出だったことを意味する |
 
 ## 処理完了後
 
