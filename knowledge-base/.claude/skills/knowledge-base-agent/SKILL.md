@@ -14,14 +14,18 @@ StorageDB（情報収集・ナレッジ管理の統合DB）から未処理アイ
 
 ### 起動時のツール検出
 
-起動時に利用可能なNotionツールを確認し、動作モードを決定する:
+> **⚠️ iOS必読 — NOTION_TOKENは絶対に確認しない**
+> iOSのClaude Codeでは、`NOTION_TOKEN` の存在確認・参照・チェックを**一切行わない**。
+> `notion-fetch` / `notion-search` / `notion-update-page` がツールリストに存在する場合は**即座にプラグインモードで開始**し、それ以外のチェックはすべてスキップする。
+
+起動時に**ツールリスト**を確認し、動作モードを決定する:
 
 | モード | 条件 | 利用ツール |
 |--------|------|------------|
-| **プラグインモード**（iOS/macOS共通） | `notion-fetch`, `notion-search`, `notion-update-page` が利用可能 | Notionマーケットプレイスプラグイン |
-| **MCP+curlモード**（macOSのみ） | `API-query-data-source`, `API-patch-page` が利用可能 + `NOTION_TOKEN` 環境変数あり | MCP標準ツール + curl |
+| **プラグインモード**（iOS/macOS共通） | `notion-fetch`, `notion-search`, `notion-update-page` がツールリストに存在する | Notionマーケットプレイスプラグイン |
+| **MCP+curlモード**（macOSのみ） | 上記が存在しない かつ `API-query-data-source`, `API-patch-page` が存在する かつ `NOTION_TOKEN` 環境変数あり | MCP標準ツール + curl |
 
-**プラグインモードを優先する。** プラグインツールが確認できた場合、NOTION_TOKEN・ネットワーク疎通・設定ファイルの確認は行わない。MCP+curlモードはフォールバック。
+**プラグインモードを最優先する。** プラグインツールがツールリストに存在した時点で確定し、NOTION_TOKEN・ネットワーク疎通・設定ファイルの確認は一切行わずにPhase 1へ進む。
 
 ### iOS での注意事項
 
@@ -122,3 +126,9 @@ SourceURL からコンテンツを取得し、以下を分析・生成する:
 - MCP+curlモード: curl の HTTP ステータスコードを確認。200 以外はエラー内容を表示して停止
 - Companies の multi_select で新しい企業名を追加する場合、Notion が自動的に新しい選択肢を作成する
 - rich_text は2000文字制限あり。超える場合は分割する
+
+| エラー | 対応 |
+|--------|------|
+| プラグインツール未検出（iOS） | **NOTION_TOKENは確認しない**。処理を停止して表示:「Notionマーケットプレイスプラグインを接続してから再試行してください」 |
+| プラグインツール未検出（macOS） | MCP+curlモードにフォールバック。NOTION_TOKEN・MCP設定を確認 |
+| NOTION_TOKENエラー | MCP+curlモード専用の問題。iOSでこのエラーが出た場合はプラグインツールが未検出のため、プラグインを接続すること |
