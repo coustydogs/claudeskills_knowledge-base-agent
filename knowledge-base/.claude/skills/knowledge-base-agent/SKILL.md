@@ -50,8 +50,8 @@ iOSのClaude Codeでは以下の制約がある:
 StorageDB から Status が「未処理」のアイテムを取得する。
 
 ### Phase 2: コンテンツ取得・分析
-Notionページの **RawContent** または SourceURL からコンテンツを取得し、以下を分析・生成する。
-**RawContent が存在する場合は優先して使用する（外部URL取得不要）。** SourceURL の取得がセキュリティ制限等でブロックされた場合も、RawContent があれば処理を継続する。
+Notionページの**ボディ（本文ブロック）** または SourceURL からコンテンツを取得し、以下を分析・生成する。
+**ページボディにコンテンツが存在する場合は優先して使用する（外部URL取得不要）。** SourceURL の取得がセキュリティ制限等でブロックされた場合も、ページボディに内容があれば処理を継続する。
 
 - Category / SubCategory（定義済み選択肢から選択）
 - Tags（定義済み選択肢から選択）
@@ -134,4 +134,4 @@ Notionページの **RawContent** または SourceURL からコンテンツを�
 | プラグインツール未検出（iOS） | **NOTION_TOKENは確認しない**。処理を停止して表示:「Notionマーケットプレイスプラグインを接続してから再試行してください」 |
 | プラグインツール未検出（macOS） | MCP+curlモードにフォールバック。NOTION_TOKEN・MCP設定を確認 |
 | NOTION_TOKENエラー | MCP+curlモード専用の問題。iOSでこのエラーが出た場合はプラグインツールが未検出のため、プラグインを接続すること |
-| SourceURL セキュリティブロック（Claude Desktop等） | **RawContent を使用して処理を継続**。エラーとして扱わない。RawContent も空の場合のみユーザーに確認 |
+| SourceURL セキュリティブロック（Claude Desktop等） | **ページボディのコンテンツを使用して処理を継続**。エラーとして扱わない。ページボディも空の場合のみユーザーに確認 |
