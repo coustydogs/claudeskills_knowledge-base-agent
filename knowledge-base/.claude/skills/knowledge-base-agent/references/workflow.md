@@ -133,6 +133,28 @@ API-patch-page:
 | 400 Validation Error | プロパティ名やフォーマットを確認 |
 | rich_text 2000文字超 | テキストを分割して複数の rich_text オブジェクトに |
 | SourceURL アクセス不可 | StorageDB の RawContent を代替ソースとして使用 |
+| curl HTTP 000 / proxy 403 | ネットワークプロキシが api.notion.com をブロックしている。ローカルまたはMOBILE環境で実行すること |
+| NOTION_TOKEN 未設定 | `export NOTION_TOKEN=ntn_xxxxx` で設定。GitHub Actions の場合はリポジトリの Secrets に登録 |
+
+## 実行環境の要件
+
+このスキルは以下の環境で正常動作する:
+
+| 環境 | 状態 | 備考 |
+|------|------|------|
+| ローカル Mac/Linux | ✅ 推奨 | `export NOTION_TOKEN=...` で設定可能 |
+| iOS Claude Code (モバイル) | ✅ 推奨 | ローカルリポジトリ接続時、NOTION_TOKEN が必要 |
+| GitHub Actions / CI | ⚠️ 要設定 | NOTION_TOKEN を Secrets に登録 + api.notion.com のアクセス許可が必要 |
+| Claude Code Web (リモート) | ❌ 非推奨 | ネットワークプロキシが api.notion.com・note.com をブロックするため動作しない |
+
+### GitHub Actions で使う場合
+
+```yaml
+env:
+  NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+```
+
+リポジトリの Settings → Secrets and variables → Actions に `NOTION_TOKEN` を登録すること。
 
 ## 処理完了後
 
