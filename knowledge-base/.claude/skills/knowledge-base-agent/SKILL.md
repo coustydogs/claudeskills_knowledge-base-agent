@@ -9,30 +9,31 @@ StorageDB（情報収集・ナレッジ管理の統合DB）から未処理アイ
 
 ## 前提条件
 
-- 環境変数 `NOTION_TOKEN` が設定されていること
-- ローカル・iOS Claude Code（リモートリポジトリ接続）いずれでも動作する
+- Notion MCPプラグイン（マーケットプレイス版）が有効であること
+- macOS / iOS のどちらでも動作する
 
-起動時に必ず以下を確認:
-```bash
-echo "NOTION_TOKEN: ${NOTION_TOKEN:0:10}..."
-```
+### 起動時のツール検出
 
-トークンが未設定の場合、ユーザーに以下を案内:
-```
-export NOTION_TOKEN=ntn_xxxxx
-```
+起動時に利用可能なNotionツールを確認し、動作モードを決定する:
+
+| モード | 条件 | 利用ツール |
+|--------|------|------------|
+| **プラグインモード**（iOS/macOS共通） | `notion-fetch`, `notion-search`, `notion-update-page` が利用可能 | Notionマーケットプレイスプラグイン |
+| **MCP+curlモード**（macOSのみ） | `API-query-data-source`, `API-patch-page` が利用可能 + `NOTION_TOKEN` 環境変数あり | MCP標準ツール + curl |
+
+プラグインモードを優先する。MCP+curlモードはフォールバック。
 
 ## リファレンスファイル
 
 処理を始める前に、必ず以下のリファレンスを読み込むこと:
 1. `references/db_schema.md` - StorageDBのスキーマ定義
-2. `references/api_patterns.sh` - Notion API の curl パターン集
+2. `references/api_patterns.sh` - API パターン集（プラグイン/curl両対応）
 3. `references/workflow.md` - 処理フローの詳細
 
 ## 処理概要
 
 ### Phase 1: 未処理アイテム取得
-StorageDB から Status が空（未処理）のアイテムを取得する。
+StorageDB から Status が「未処理」のアイテムを取得する。
 
 ### Phase 2: コンテンツ取得・分析
 SourceURL からコンテンツを取得し、以下を分析・生成する:
@@ -49,19 +50,57 @@ SourceURL からコンテンツを取得し、以下を分析・生成する:
 
 ## API呼び出しの原則
 
-1. **プロパティ更新（分析結果の書き込み）**: `API-patch-page`（MCP）推奨。`curl` でも可。
-2. **読み取り・検索**: MCP ツール（`notion-fetch`, `notion-search`, `API-query-data-source`）を使ってよい
-3. **ブロック操作**: `API-patch-block-children`, `API-get-block-children` は正常動作する
+### プラグインモード（推奨）
 
-## MCP ツールの既知の問題（重要）
+1. **DB検索（未処理取得）**: `notion-search` で `data_source_url: collection://48887d97-0f04-4c52-9f44-0b77fd8cf4f1` を指定して「未処理」を検索。取得後、各ページを `notion-fetch` で Status プロパティを確認する。
+2. **プロパティ更新**: `notion-update-page` の `update_properties` コマンドを使用。SQLite形式でプロパティ値を指定する。
+3. **読み取り**: `notion-fetch` でページ/DBのコンテンツを取得
+4. **コンテンツ編集**: `notion-update-page` の `insert_content_after` / `replace_content` コマンドを使用
 
-以下のパラメータは JSON Schema に `"type": "object"` が未宣言のため、文字列としてシリアライズされるバグがある:
+### MCP+curlモード（フォールバック）
+
+1. **DB検索**: `API-query-data-source` で構造化フィルタ、または `curl` で直接クエリ
+2. **プロパティ更新**: `API-patch-page`（MCP）推奨。`curl` でも可。
+3. **読み取り・検索**: MCP ツール（`notion-fetch`, `notion-search`, `API-query-data-source`）
+4. **ブロック操作**: `API-patch-block-children`, `API-get-block-children`
+
+## プロパティ更新フォーマット
+
+### プラグインモード（SQLite形式）
+
+```json
+{
+  "Category": "AI・機械学習",
+  "SubCategory": ["Agent", "LLM"],
+  "Tags": ["技術解説", "日本"],
+  "Companies": ["OpenAI", "Anthropic"],
+  "Relevance": "高",
+  "Summary": "要約テキスト",
+  "KeyPoints": "• ポイント1\n• ポイント2",
+  "Status": "完了",
+  "date:OriginalDate:start": "2026-02-15",
+  "date:OriginalDate:is_datetime": 0,
+  "date:ProcessedAt:start": "2026-02-21",
+  "date:ProcessedAt:is_datetime": 0
+}
+```
+
+### MCP+curlモード（Notion API形式）
+
+```json
+{
+  "Category": {"select": {"name": "AI・機械学習"}},
+  "Status": {"select": {"name": "完了"}},
+  "ProcessedAt": {"date": {"start": "2026-02-21"}}
+}
+```
+
+## MCP標準ツールの既知の問題
+
+以下のパラメータは JSON Schema に `"type": "object"` が未宣言のため、文字列としてシリアライズされるバグがある（MCP+curlモード時のみ該当）:
 
 | ツール | パラメータ | 状態 |
 |--------|-----------|------|
-| `notion-create-pages` | `parent` | ❌ 使用不可 |
-| `notion-move-pages` | `new_parent` | ❌ 使用不可 |
-| `notion-update-page` | `data` | ❌ 使用不可 |
 | `API-post-page` | `parent` | ❌ 使用不可 |
 | `API-move-page` | `parent` | ❌ 使用不可 |
 | `API-patch-page` | `properties` | ✅ 正常（型定義あり） |
@@ -69,6 +108,7 @@ SourceURL からコンテンツを取得し、以下を分析・生成する:
 
 ## エラーハンドリング
 
-- curl の HTTP ステータスコードを必ず確認する
-- 200 以外の場合はエラー内容を表示して処理を停止する
+- プラグインモード: ツールのエラーメッセージを確認して対応
+- MCP+curlモード: curl の HTTP ステータスコードを確認。200 以外はエラー内容を表示して停止
 - Companies の multi_select で新しい企業名を追加する場合、Notion が自動的に新しい選択肢を作成する
+- rich_text は2000文字制限あり。超える場合は分割する
